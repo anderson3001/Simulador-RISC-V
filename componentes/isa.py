@@ -1,7 +1,34 @@
-# Instruções do RISC-V e decodificação
+# montador e decodificador
 
-INSTRUCOES = {
-    "0110011": { # opcode
+MONTADOR_ISA = {
+    "add":  {"tipo": "R", "opcode": "0110011", "funct3": "000", "funct7": "0000000"},
+    "sub":  {"tipo": "R", "opcode": "0110011", "funct3": "000", "funct7": "0100000"},
+    "mul":  {"tipo": "R", "opcode": "0110011", "funct3": "000", "funct7": "0000001"},
+    "div":  {"tipo": "R", "opcode": "0110011", "funct3": "100", "funct7": "0000001"},
+    "rem":  {"tipo": "R", "opcode": "0110011", "funct3": "110", "funct7": "0000001"},
+    "xor":  {"tipo": "R", "opcode": "0110011", "funct3": "100", "funct7": "0000000"},
+    "and":  {"tipo": "R", "opcode": "0110011", "funct3": "111", "funct7": "0000000"},
+    "or":   {"tipo": "R", "opcode": "0110011", "funct3": "110", "funct7": "0000000"},
+    "sll":  {"tipo": "R", "opcode": "0110011", "funct3": "001", "funct7": "0000000"},
+    "srl":  {"tipo": "R", "opcode": "0110011", "funct3": "101", "funct7": "0000000"},
+
+    "addi": {"tipo": "I", "opcode": "0010011", "funct3": "000"},
+    "lw":   {"tipo": "I", "opcode": "0000011", "funct3": "010"},
+    "jalr": {"tipo": "I", "opcode": "1100111", "funct3": "000"},
+
+    "sw":   {"tipo": "S", "opcode": "0100011", "funct3": "010"},
+
+    "beq":  {"tipo": "B", "opcode": "1100011", "funct3": "000"},
+    "bne":  {"tipo": "B", "opcode": "1100011", "funct3": "001"},
+    "bge":  {"tipo": "B", "opcode": "1100011", "funct3": "101"},
+    "blt":  {"tipo": "B", "opcode": "1100011", "funct3": "100"},
+
+    "jal":  {"tipo": "J", "opcode": "1101111"},
+    "j":    {"tipo": "J", "opcode": "1101111"},
+}
+
+DECODIFICADOR_ISA = {
+"0110011": { # opcode
         "tipo": "R", # tipo de instrução
         "funct3": {
             "000": {
@@ -53,7 +80,7 @@ INSTRUCOES = {
     },
 }
 
-# extensão de sinal para valores i
+
 def _sign_extend(value, bits):
     sign_bit = 1 << (bits - 1)
     return (value & (sign_bit - 1)) - (value & sign_bit)
@@ -71,7 +98,7 @@ def decodificar(inst_bin: str):
     rs2 = int(inst_bin[7:12], 2)
     funct7 = inst_bin[0:7]
 
-    inst_info = INSTRUCOES.get(opcode)
+    inst_info = DECODIFICADOR_ISA.get(opcode)
 
     if not inst_info:
         return {"nome": "desconhecida", "opcode": opcode}
@@ -102,10 +129,9 @@ def decodificar(inst_bin: str):
         
         elif tipo == "J":
             decodificada["nome"] = inst_info["nome"]
-            # A instrução 'J' é um pseudônimo para 'JAL' com rd=0
+            
             if decodificada["nome"] == "jal" and rd == 0:
-                decodificada["nome"] = "j" # Facilita a identificação no simulador
-                
+                decodificada["nome"] = "j"
             imm_str = inst_bin[0] + inst_bin[12:20] + inst_bin[11] + inst_bin[1:11] + "0"
             imm_val = int(imm_str, 2)
             decodificada["imm"] = _sign_extend(imm_val, 21)
@@ -114,12 +140,6 @@ def decodificar(inst_bin: str):
             return {"nome": "desconhecida", "tipo": tipo}
 
     except KeyError:
-        # Ocorre se uma combinação de opcode/funct3/funct7 não for encontrada
-        return {
-            "nome": "desconhecida",
-            "opcode": opcode,
-            "funct3": funct3,
-            "funct7": funct7,
-        }
+        return {"nome": "desconhecida", "opcode": opcode, "funct3": funct3, "funct7": funct7}
         
     return decodificada
