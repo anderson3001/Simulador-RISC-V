@@ -29,16 +29,33 @@ class ALU32Bit:
 
     def xor_op(self, a, b):
         return a ^ b
+    
+    def mul(self, a, b):
+        # Multiplication, wrap to 32-bit
+        return (a * b) & self.mask32
 
-    def nor_op(self, a, b):
-        return ~(a | b) & self.mask32
+    def div(self, a, b):
+        # Division (unsigned)
+        if b == 0:
+            raise ZeroDivisionError("Division by zero")
+        return (a // b) & self.mask32
 
-    def not_op(self, a):
-        return ~a & self.mask32
+    def rem(self, a, b):
+        # Remainder (modulo)
+        if b == 0:
+            raise ZeroDivisionError("Modulo by zero")
+        return (a % b) & self.mask32
+    
+    def srl(self, a, b):
+        # Logical right shift by b bits
+        shift = b & 0x1F  # Only use lower 5 bits for shift amount (0-31)
+        return (a >> shift) & self.mask32
 
-    def slt(self, a, b):
-        """Set if less than (signed comparison)."""
-        return 1 if self.signed(a) < self.signed(b) else 0
+    def sll(self, a, b):
+        # Logical left shift by b bits
+        shift = b & 0x1F
+        return (a << shift) & self.mask32
+
 
     def operate(self, op, a, b=0):
         operations = {
@@ -47,9 +64,11 @@ class ALU32Bit:
             'AND': self.and_op,
             'OR': self.or_op,
             'XOR': self.xor_op,
-            'NOR': self.nor_op,
-            'NOT': lambda a, _: self.not_op(a),
-            'SLT': self.slt
+            'MUL':self.mul,
+            'DIV':self.div,
+            'REM':self.rem,
+            'SRL':self.srl,
+            'SLL':self.sll
         }
 
         op = op.upper()
