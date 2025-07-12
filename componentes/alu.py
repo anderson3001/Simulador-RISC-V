@@ -81,13 +81,15 @@ class ALU32Bit:
 # Example Usage
 alu = ALU32Bit()
 a = 0x7FFFFFFF  # Max positive signed 32-bit int
-b = 0x00000001
+b = 0x00000002
 
 print("ADD :", hex(alu.operate('ADD', a, b)))
 print("SUB :", hex(alu.operate('SUB', a, b)))
 print("AND :", hex(alu.operate('AND', a, b)))
 print("OR  :", hex(alu.operate('OR', a, b)))
 print("XOR :", hex(alu.operate('XOR', a, b)))
-print("NOR :", hex(alu.operate('NOR', a, b)))
-print("NOT :", hex(alu.operate('NOT', a)))
-print("SLT :", alu.operate('SLT', a, b))
+print("MUL:", hex(alu.mul(a, b)))
+print("DIV:", hex(alu.div(a, b)))
+print("REM:", hex(alu.rem(a, b)))
+print("SRL:", hex(alu.srl(a, b)))
+print("SLL:", hex(alu.sll(a, b)))
