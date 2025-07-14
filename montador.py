@@ -1,5 +1,6 @@
 from componentes.isa import MONTADOR_ISA
 from componentes.registradores import Registradores
+import re
 
 # Inicializa uma instância para acessar os nomes da ABI
 registradores_info = Registradores()
@@ -105,6 +106,17 @@ def segunda_passagem(caminho_arquivo, labels):
                 endereco_atual += 4
 
     return programa_binario
+# função auxilar pra sw e lw
+def parse_mem_access(partes):
+    rd = partes[1]
+    # Usa uma expressão regular para extrair o imediato e o registrador base
+    match = re.match(r'(-?\d+)\((\w+)\)', partes[2])
+    if not match:
+        raise ValueError(f"Formato de acesso à memória inválido: {' '.join(partes)}")
+    
+    imediato = match.group(1)
+    rs1 = match.group(2)
+    return rd, imediato, rs1
 
 def montar_tipo_r(partes): # fazer pra cada tipo de instrução
     """Monta uma instrução do Tipo R em binário."""
