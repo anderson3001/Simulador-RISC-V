@@ -92,14 +92,14 @@ def segunda_passagem(caminho_arquivo, labels):
             binario_final = ""
             if info['tipo'] == 'R':
                 binario_final = montar_tipo_r(partes)
-            # elif info['tipo'] == 'I':
-            #     binario_final = montar_tipo_i(partes)
-            # elif info['tipo'] == 'S':
-            #     binario_final = montar_tipo_s(partes)
-            # elif info['tipo'] == 'B':
-            #     binario_final = montar_tipo_b(partes)
-            # elif info['tipo'] == 'J':
-            #     binario_final = montar_tipo_j(partes)
+            elif info['tipo'] == 'I':
+                binario_final = montar_tipo_i(partes)
+            elif info['tipo'] == 'S':
+                binario_final = montar_tipo_s(partes)
+            elif info['tipo'] == 'B':
+                binario_final = montar_tipo_b(partes)
+            elif info['tipo'] == 'J':
+                binario_final = montar_tipo_j(partes)
 
             if binario_final:
                 programa_binario.append(binario_final)
@@ -132,3 +132,109 @@ def montar_tipo_r(partes): # fazer pra cada tipo de instrução
 
     # Monta na ordem correta do formato R
     return f"{funct7}{rs2}{rs1}{funct3}{rd}{opcode}"
+def montar_tipo_i(partes):
+    """Monta uma instrução do Tipo I em binário."""
+    # Ex: addi t0, t1, -10  OU  lw t0, 16(sp)
+    nome_inst = partes[0]
+    info = MONTADOR_ISA[nome_inst]
+    
+    if nome_inst == 'lw' or nome_inst == 'jalr':
+        rd, imediato_str, rs1_str = parse_mem_access(partes)
+    else: # addi
+        rd, rs1_str, imediato_str = partes[1], partes[2], partes[3]
+
+    rd_bin = format(ABI_NAMES[rd], '05b')
+    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
+    
+    # Converte imediato para inteiro e depois para binário de 12 bits (complemento de dois)
+    imediato = int(imediato_str)
+    imm_bin = format(imediato & 0xFFF, '012b')
+
+    opcode = info['opcode']
+    funct3 = info['funct3']
+    
+    return f"{imm_bin}{rs1_bin}{funct3}{rd_bin}{opcode}"
+
+def montar_tipo_s(partes):
+    """Monta uma instrução do Tipo S em binário."""
+    # Ex: sw t1, 32(sp)
+    info = MONTADOR_ISA[partes[0]]
+    rs2_str, imediato_str, rs1_str = parse_mem_access(partes)
+
+    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
+    rs2_bin = format(ABI_NAMES[rs2_str], '05b')
+    
+    imediato = int(imediato_str)
+    imm_bin_12 = format(imediato & 0xFFF, '012b')
+    
+    # Divide o imediato de 12 bits conforme o formato Tipo S
+    imm_11_5 = imm_bin_12[0:7]
+    imm_4_0 = imm_bin_12[7:12]
+
+    opcode = info['opcode']
+    funct3 = info['funct3']
+
+    return f"{imm_11_5}{rs2_bin}{rs1_bin}{funct3}{imm_4_0}{opcode}"
+
+def montar_tipo_b(partes, labels, endereco_atual):
+    """Monta uma instrução do Tipo B em binário."""
+    # Ex: bne t0, zero, loop
+    nome_inst = partes[0]
+    info = MONTADOR_ISA[nome_inst]
+    
+    rs1_str, rs2_str, label = partes[1], partes[2], partes[3]
+    
+    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
+    rs2_bin = format(ABI_NAMES[rs2_str], '05b')
+    
+    # Calcula o offset
+    endereco_alvo = labels[label]
+    offset = endereco_alvo - endereco_atual
+    
+    # Converte o offset para binário de 13 bits (complemento de dois)
+    offset_bin_13 = format(offset & 0x1FFF, '013b')
+
+    # Reorganiza os bits do offset conforme o formato Tipo B
+    imm_12 = offset_bin_13[0]
+    imm_10_5 = offset_bin_13[2:8]
+    imm_4_1 = offset_bin_13[8:12]
+    imm_11 = offset_bin_13[1]
+    
+    opcode = info['opcode']
+    funct3 = info['funct3']
+
+    return f"{imm_12}{imm_10_5}{rs2_bin}{rs1_bin}{funct3}{imm_4_1}{imm_11}{opcode}"
+
+def montar_tipo_j(partes, labels, endereco_atual):
+    """Monta uma instrução do Tipo J em binário."""
+    # Ex: jal ra, alvo  OU  j alvo
+    nome_inst = partes[0]
+    info = MONTADOR_ISA[nome_inst]
+
+    if nome_inst == 'j': # Pseudo-instrução j
+        rd_str = 'zero' # rd é implicitamente x0
+        label = partes[1]
+    else: # jal
+        rd_str = partes[1]
+        label = partes[2]
+
+    rd_bin = format(ABI_NAMES[rd_str], '05b')
+    
+    # Calcula o offset
+    endereco_alvo = labels[label]
+    offset = endereco_alvo - endereco_atual
+    
+    # Converte para binário de 21 bits (complemento de dois)
+    offset_bin_21 = format(offset & 0x1FFFFF, '021b')
+    
+    # Reorganiza os bits do offset conforme o formato Tipo J
+    imm_20 = offset_bin_21[0]
+    imm_10_1 = offset_bin_21[10:20]
+    imm_11 = offset_bin_21[9]
+    imm_19_12 = offset_bin_21[1:9]
+    
+    imm_reorganizado = f"{imm_20}{imm_10_1}{imm_11}{imm_19_12}"
+    
+    opcode = info['opcode']
+
+    return f"{imm_reorganizado}{rd_bin}{opcode}"
