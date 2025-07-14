@@ -33,19 +33,7 @@ class SimuladorPipeline:
         self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
 
     def carregar_programa(self, arquivo_binario):
-        # Lê um arquivo com código de máquina (um hexadecimal por linh e carrega na memória de instruções
-        try:
-            with open(arquivo_binario, 'r') as f:
-                for linha in f:
-                    # Remove espaços e quebras de linha, depois converte de hex para int
-                    inst_hex = linha.strip()
-                    if inst_hex:
-                        inst_int = int(inst_hex, 16)
-                        # Converte para string binária de 32 bits com zeros à esquerda
-                        self.memoria_instrucoes.append(format(inst_int, '032b'))
-        except FileNotFoundError:
-            print(f"Erro: Arquivo '{arquivo_binario}' não encontrado.")
-            sys.exit(1)
+        self.memoria_instrucoes = arquivo_binario
         print(f"Programa carregado. {len(self.memoria_instrucoes)} instruções.")
 
     def run(self):
@@ -132,61 +120,64 @@ class SimuladorPipeline:
         if nome in ['jal', 'jalr']: return True
         return False
 
-    def estagio_ex(self):
-        # Estágio de Execução ( 3 ) 
-        # Passa os dados do estágio anterior
-        self.ex_mem = self.id_ex
-        info = self.ex_mem['instrucao_info']
-        nome = info.get('nome')
+def estagio_ex(self):
+    # Estágio de Execução ( 3 ) 
+    info = self.id_ex['instrucao_info'] # Pega info do registrador anterior
+    nome = info.get('nome')
 
-        if nome == 'nop':
-            return
-        
-        # Seleciona as entradas da ULA
-        operando_a = self.ex_mem['val_rs1']
-        operando_b = self.ex_mem['val_rs2']
-        if info['tipo'] in ['I', 'S', 'B', 'J']:
-            operando_b = info.get('imm', 0)
-
-        resultado_ula = 0
-        
-        # Determina a operação da ULA
-        if nome in ['add', 'addi', 'lw', 'sw']:
-            resultado_ula = self.alu.operate('ADD', operando_a, operando_b)
-        elif nome in ['sub', 'beq', 'bne', 'blt', 'bge']:
-            resultado_ula = self.alu.operate('SUB', operando_a, operando_b)
-        elif nome in ['mul', 'div', 'rem', 'xor', 'and', 'or', 'sll', 'srl']:
-            resultado_ula = self.alu.operate(nome, operando_a, operando_b)
-        elif nome in ['jal', 'jalr']:
-            # Para JAL/JALR, o resultado a ser salvo é PC+4
-            resultado_ula = self.ex_mem['pc'] + 4
-        
-        self.ex_mem['resultado_ula'] = resultado_ula
+    if nome == 'nop':
+        # Se for nop, propaga um nop para o próximo estágio
+        self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
+        return
     
-    def estagio_mem(self):
-        # Estágio de Acesso à Memória Memory ( 4 )
-        self.mem_wb = self.ex_mem
-        info = self.mem_wb['instrucao_info']
-        nome = info.get('nome')
+    # Seleciona as entradas da ULA
+    operando_a = self.id_ex['val_rs1']
+    operando_b = self.id_ex['val_rs2']
+    if info['tipo'] in ['I', 'S', 'B', 'J']:
+        operando_b = info.get('imm', 0)
 
-        if nome == 'nop':
-            return
+    resultado_ula = 0
+    
+    # ... (lógica da ULA permanece a mesma) ...
+    if nome in ['add', 'addi', 'lw', 'sw']:
+        resultado_ula = self.alu.operate('ADD', operando_a, operando_b)
+    elif nome in ['sub', 'beq', 'bne', 'blt', 'bge']:
+        resultado_ula = self.alu.operate('SUB', operando_a, operando_b)
+    elif nome in ['mul', 'div', 'rem', 'xor', 'and', 'or', 'sll', 'srl']:
+        resultado_ula = self.alu.operate(nome, operando_a, operando_b)
+    elif nome in ['jal', 'jalr']:
+        resultado_ula = self.id_ex['pc'] + 4
+    
+    # CRIA UM NOVO DICIONÁRIO para o registrador EX/MEM
+    self.ex_mem = {
+        'instrucao_info': info, 
+        'resultado_ula': resultado_ula, 
+        'val_rs2': self.id_ex['val_rs2'] # Precisa passar val_rs2 para o 'sw'
+    }
+    
+def estagio_mem(self):
+    # Estágio de Acesso à Memória ( 4 )
+    info = self.ex_mem['instrucao_info']
+    nome = info.get('nome')
 
-        resultado_final = self.mem_wb['resultado_ula']
+    if nome == 'nop':
+        self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
+        return
 
-        if nome == 'lw':
-            # Endereço de memória calculado na ULA
-            addr = self.mem_wb['resultado_ula']
-            # Lê da memória de dados (simples, sem tratamento de tamanho de palavra)
-            resultado_final = self.memoria_dados.get(addr, 0) 
-        elif nome == 'sw':
-            # Endereço de memória calculado na ULA
-            addr = self.mem_wb['resultado_ula']
-            # Valor a ser escrito é o de rs2
-            valor_a_escrever = self.mem_wb['val_rs2']
-            self.memoria_dados[addr] = valor_a_escrever
-            
-        self.mem_wb['resultado_final'] = resultado_final
+    resultado_final = self.ex_mem['resultado_ula']
+    addr = self.ex_mem['resultado_ula']
+
+    if nome == 'lw':
+        resultado_final = self.memoria_dados.get(addr, 0) 
+    elif nome == 'sw':
+        valor_a_escrever = self.ex_mem['val_rs2']
+        self.memoria_dados[addr] = valor_a_escrever
+        
+    # CRIA UM NOVO DICIONÁRIO para o registrador MEM/WB
+    self.mem_wb = {
+        'instrucao_info': info, 
+        'resultado_final': resultado_final
+    }
 
     def estagio_wb(self):
         # Estágio de Write-Back ( 5 ) 
@@ -225,21 +216,38 @@ class SimuladorPipeline:
             
             f.write("\n" + "="*40 + "\n\n")
 
+# A NOVA VERSÃO
 if __name__ == "__main__":
-    # Limpa o arquivo de saída anterior
+    # --- PREPARAÇÃO ---
+    # 0. Importar o montador que você criou
+    import montador 
+
+    # 1. Limpar o arquivo de saída anterior
     open("saida.out", "w").close()
 
-    simulador = SimuladorPipeline()
-    
-    # Verifique se um nome de arquivo foi passado como argumento
+    # 2. Verificar se um arquivo .asm foi fornecido
     if len(sys.argv) < 2:
-        print("Uso: python simulador_pipeline.py <arquivo_de_codigo.hex>")
+        print("Uso: python simulador_pipeline.py <caminho_para_arquivo.asm>")
         sys.exit(1)
 
-    arquivo_programa = sys.argv[1]
-    simulador.carregar_programa(arquivo_programa)
-    simulador.run()
-  
-  # Para rodar é o seguinte, cria um arquivo teste.hex com um programa em código de máquina hexadecimal ( com cada instrução em uma linha ) 
-  # e executa isso no terminal : python simulador_pipeline.py teste.hex
+    caminho_arquivo_asm = sys.argv[1]
+    if not caminho_arquivo_asm.endswith('.asm'):
+        print("Erro: O arquivo de entrada deve ser do tipo .asm")
+        sys.exit(1)
 
+    # --- FASE 1: MONTAGEM ---
+    # Chama o montador para traduzir o .asm para binário
+    print(f"Montando o arquivo: {caminho_arquivo_asm}...")
+    programa_em_binario = montador.montar(caminho_arquivo_asm)
+    
+    # Se a montagem falhar ou o arquivo estiver vazio, encerra.
+    if not programa_em_binario:
+        print("Erro durante a montagem ou arquivo vazio. Encerrando.")
+        sys.exit(1)
+    print("Montagem concluída com sucesso.")
+
+    # --- FASE 2: SIMULAÇÃO ---
+    # Agora que temos o código binário, podemos simular.
+    simulador = SimuladorPipeline()
+    simulador.carregar_programa(programa_em_binario) # Usa a NOVA versão de carregar_programa
+    simulador.run()
