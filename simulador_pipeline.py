@@ -2,9 +2,9 @@
 # Este é o arquivo principal que orquestra o simulador com pipeline.
 
 import sys
-from alu import ALU32Bit
-from ISA import decodificar
-from registradores import Registradores
+from componentes.alu import ALU32Bit
+from componentes.isa import decodificar
+from componentes.registradores import Registradores
 
 class SimuladorPipeline:
     def __init__(self, enable_forwarding=False, enable_hazard_detection=False):
@@ -241,5 +241,5 @@ if __name__ == "__main__":
     simulador.run()
   
   # Para rodar é o seguinte, cria um arquivo teste.hex com um programa em código de máquina hexadecimal ( com cada instrução em uma linha ) 
-    e executa isso no terminal : python simulador_pipeline.py teste.hex
+  # e executa isso no terminal : python simulador_pipeline.py teste.hex
 
