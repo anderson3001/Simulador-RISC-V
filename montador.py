@@ -2,239 +2,235 @@ from componentes.isa import MONTADOR_ISA
 from componentes.registradores import Registradores
 import re
 
+# --- Bloco de Inicialização e Funções Auxiliares ---
+
 # Inicializa uma instância para acessar os nomes da ABI
 registradores_info = Registradores()
 ABI_NAMES = registradores_info.ABI
 
-def montar(caminho_arquivo):
+def get_reg_num(reg_str):
     """
-    Entrada: Caminho para um arquivo .asm
-    Saída: Uma lista de strings, onde cada string é uma instrução em binário de 32 bits.
+    Converte um nome de registrador (ex: 't0' ou 'x5') para seu número inteiro.
+    Retorna o número do registrador ou lança um erro se for inválido.
     """
-    
-    # 1. Primeira Passagem: Encontrar e mapear todas as labels
-    print("Iniciando primeira passagem (mapeamento de labels)...")
-    labels = primeira_passagem(caminho_arquivo)
-    print(f"Labels encontradas: {labels}")
+    reg_str = reg_str.lower().strip()
+    if reg_str in ABI_NAMES:
+        return ABI_NAMES[reg_str]
+    elif reg_str.startswith('x'):
+        try:
+            num = int(reg_str[1:])
+            if 0 <= num < 32:
+                return num
+        except ValueError:
+            pass
+    raise ValueError(f"ERRO: Nome de registrador inválido ou não reconhecido: '{reg_str}'")
 
-    # 2. Segunda Passagem: Traduzir as instruções para binário
-    print("Iniciando segunda passagem (tradução de instruções)...")
-    programa_binario = segunda_passagem(caminho_arquivo, labels)
+def parse_mem_access(partes):
+    """
+    Função auxiliar para parsear instruções como 'lw t0, 16(sp)'.
+    Retorna (registrador_operando, imediato, registrador_base).
+    """
+    reg_operando = partes[1]
+    match = re.match(r'(-?\d+)\((\w+)\)', partes[2])
+    if not match:
+        raise ValueError(f"Formato de acesso à memória inválido: {' '.join(partes)}")
     
-    return programa_binario
+    imediato = match.group(1)
+    reg_base = match.group(2)
+    return reg_operando, imediato, reg_base
 
-# funções de passagens e auxiliares
+# --- Funções de Montagem por Tipo de Instrução ---
+
+def montar_tipo_r(partes):
+    info = MONTADOR_ISA[partes[0]]
+    rd_num = get_reg_num(partes[1])
+    rs1_num = get_reg_num(partes[2])
+    rs2_num = get_reg_num(partes[3])
+
+    rd_bin = format(rd_num, '05b')
+    rs1_bin = format(rs1_num, '05b')
+    rs2_bin = format(rs2_num, '05b')
+    
+    return f"{info['funct7']}{rs2_bin}{rs1_bin}{info['funct3']}{rd_bin}{info['opcode']}"
+
+def montar_tipo_i(partes):
+    nome_inst = partes[0]
+    info = MONTADOR_ISA[nome_inst]
+    
+    if nome_inst in ['lw', 'jalr']:
+        rd_str, imediato_str, rs1_str = parse_mem_access(partes)
+    else: # addi
+        rd_str, rs1_str, imediato_str = partes[1], partes[2], partes[3]
+
+    rd_num = get_reg_num(rd_str)
+    rs1_num = get_reg_num(rs1_str)
+    
+    rd_bin = format(rd_num, '05b')
+    rs1_bin = format(rs1_num, '05b')
+    
+    imediato = int(imediato_str)
+    imm_bin = format(imediato & 0xFFF, '012b')
+    
+    return f"{imm_bin}{rs1_bin}{info['funct3']}{rd_bin}{info['opcode']}"
+
+def montar_tipo_s(partes):
+    info = MONTADOR_ISA[partes[0]]
+    rs2_str, imediato_str, rs1_str = parse_mem_access(partes)
+
+    rs1_num = get_reg_num(rs1_str)
+    rs2_num = get_reg_num(rs2_str)
+
+    rs1_bin = format(rs1_num, '05b')
+    rs2_bin = format(rs2_num, '05b')
+    
+    imediato = int(imediato_str)
+    imm_bin_12 = format(imediato & 0xFFF, '012b')
+    
+    imm_11_5 = imm_bin_12[0:7]
+    imm_4_0 = imm_bin_12[7:12]
+
+    return f"{imm_11_5}{rs2_bin}{rs1_bin}{info['funct3']}{imm_4_0}{info['opcode']}"
+
+def montar_tipo_b(partes, labels, endereco_atual):
+    info = MONTADOR_ISA[partes[0]]
+    rs1_str, rs2_str, label = partes[1], partes[2], partes[3]
+    
+    rs1_num = get_reg_num(rs1_str)
+    rs2_num = get_reg_num(rs2_str)
+
+    rs1_bin = format(rs1_num, '05b')
+    rs2_bin = format(rs2_num, '05b')
+    
+    endereco_alvo = labels[label]
+    offset = endereco_alvo - endereco_atual
+    
+    # Converte para binário de 13 bits (complemento de dois)
+    offset_bin_13 = format(offset & 0x1FFF, '013b')
+
+    # Reorganiza os bits do offset conforme o formato Tipo B
+    # offset_bin[0]   -> imm[12]
+    # offset_bin[1]   -> imm[11]
+    # offset_bin[2:8] -> imm[10:5]
+    # offset_bin[8:12]-> imm[4:1]
+    imm_12 = offset_bin_13[0]
+    imm_11 = offset_bin_13[1]
+    imm_10_5 = offset_bin_13[2:8]
+    imm_4_1 = offset_bin_13[8:12]
+    
+    return f"{imm_12}{imm_10_5}{rs2_bin}{rs1_bin}{info['funct3']}{imm_4_1}{imm_11}{info['opcode']}"
+
+def montar_tipo_j(partes, labels, endereco_atual):
+    nome_inst = partes[0]
+    info = MONTADOR_ISA[nome_inst]
+
+    if nome_inst == 'j':
+        rd_str = 'zero'
+        label = partes[1]
+    else: # jal
+        rd_str = partes[1]
+        label = partes[2]
+
+    rd_num = get_reg_num(rd_str)
+    rd_bin = format(rd_num, '05b')
+    
+    endereco_alvo = labels[label]
+    offset = endereco_alvo - endereco_atual
+    
+    offset_bin_21 = format(offset & 0x1FFFFF, '021b')
+    
+    # Reorganiza os bits do offset conforme o formato Tipo J
+    # offset_bin[0]    -> imm[20]
+    # offset_bin[1:9]  -> imm[19:12]
+    # offset_bin[9]    -> imm[11]
+    # offset_bin[10:20]-> imm[10:1]
+    imm_20 = offset_bin_21[0]
+    imm_19_12 = offset_bin_21[1:9]
+    imm_11 = offset_bin_21[9]
+    imm_10_1 = offset_bin_21[10:20]
+    
+    imm_reorganizado = f"{imm_20}{imm_10_1}{imm_11}{imm_19_12}"
+    
+    return f"{imm_reorganizado}{rd_bin}{info['opcode']}"
+
+# --- Funções Principais do Montador (Passagens) ---
 
 def primeira_passagem(caminho_arquivo):
-    """
-    Lê o arquivo .asm para encontrar todas as labels e seus endereços.
-    """
     labels = {}
     endereco_atual = 0
     try:
         with open(caminho_arquivo, 'r') as f:
             for linha in f:
-                linha_limpa = linha.strip()
-
-                # Ignora linhas vazias e comentários
-                if not linha_limpa or linha_limpa.startswith('#'):
+                linha_sem_comentario = linha.split('#')[0].strip()
+                if not linha_sem_comentario:
                     continue
-
-                # Verifica se a linha é uma label (ex: "loop:")
-                if ':' in linha_limpa:
-                    nome_label = linha_limpa.split(':')[0].strip()
-                    labels[nome_label] = endereco_atual
-                    # Remove a label da linha para ver se há uma instrução na mesma linha
-                    linha_limpa = linha_limpa.split(':', 1)[1].strip()
                 
-                # Se sobrar algo na linha, é uma instrução, então avançamos o endereço
-                if linha_limpa:
+                if ':' in linha_sem_comentario:
+                    partes = [p.strip() for p in linha_sem_comentario.split(':')]
+                    if partes[0]:
+                        labels[partes[0]] = endereco_atual
+                    if len(partes) < 2 or not partes[1]:
+                        continue
+                    linha_processada = partes[1]
+                else:
+                    linha_processada = linha_sem_comentario
+
+                if linha_processada:
                     endereco_atual += 4
     except FileNotFoundError:
         print(f"Erro: Arquivo '{caminho_arquivo}' não encontrado.")
-        exit(1) # Termina o programa se o arquivo não existir
-        
+        exit(1)
     return labels
-# Adicione estas funções ao montador.py
 
 def segunda_passagem(caminho_arquivo, labels):
-    """
-    Lê o arquivo .asm novamente, traduzindo cada instrução para binário.
-    """
     programa_binario = []
     endereco_atual = 0
     with open(caminho_arquivo, 'r') as f:
-        for linha in f:
-            linha_limpa = linha.strip()
+        for num_linha, linha in enumerate(f, 1):
+            linha_limpa = linha.split('#')[0].strip()
             
-            # Ignora comentários
-            if '#' in linha_limpa:
-                linha_limpa = linha_limpa.split('#')[0].strip()
-            
-            # Remove a label se houver
             if ':' in linha_limpa:
                 linha_limpa = linha_limpa.split(':', 1)[1].strip()
 
             if not linha_limpa:
                 continue
 
-            # Converte vírgulas para espaços e divide a instrução em partes
             partes = linha_limpa.replace(',', ' ').split()
-            nome_inst = partes[0].lower() # ex: "add"
-
-            # Busca a informação da instrução no nosso dicionário
+            nome_inst = partes[0].lower()
             info = MONTADOR_ISA.get(nome_inst)
             if not info:
-                print(f"Erro: Instrução desconhecida '{nome_inst}' na linha: {linha}")
+                print(f"Erro na linha {num_linha}: Instrução desconhecida '{nome_inst}'")
                 continue
             
-            # Chama a função de montagem apropriada para o tipo da instrução
-            binario_final = ""
-            if info['tipo'] == 'R':
-                binario_final = montar_tipo_r(partes)
-            elif info['tipo'] == 'I':
-                binario_final = montar_tipo_i(partes)
-            elif info['tipo'] == 'S':
-                binario_final = montar_tipo_s(partes)
-            elif info['tipo'] == 'B':
-                binario_final = montar_tipo_b(partes)
-            elif info['tipo'] == 'J':
-                binario_final = montar_tipo_j(partes)
+            try:
+                binario_final = ""
+                if info['tipo'] == 'R':
+                    binario_final = montar_tipo_r(partes)
+                elif info['tipo'] == 'I':
+                    binario_final = montar_tipo_i(partes)
+                elif info['tipo'] == 'S':
+                    binario_final = montar_tipo_s(partes)
+                elif info['tipo'] == 'B':
+                    binario_final = montar_tipo_b(partes, labels, endereco_atual)
+                elif info['tipo'] == 'J':
+                    binario_final = montar_tipo_j(partes, labels, endereco_atual)
+                
+                if binario_final:
+                    assert len(binario_final) == 32
+                    programa_binario.append(binario_final)
+                    endereco_atual += 4
 
-            if binario_final:
-                programa_binario.append(binario_final)
-                endereco_atual += 4
+            except (ValueError, KeyError, IndexError) as e:
+                print(f"Erro de montagem na linha {num_linha} ('{linha.strip()}'): {e}")
+                return [] # Retorna lista vazia em caso de erro
 
     return programa_binario
-# função auxilar pra sw e lw
-def parse_mem_access(partes):
-    rd = partes[1]
-    # Usa uma expressão regular para extrair o imediato e o registrador base
-    match = re.match(r'(-?\d+)\((\w+)\)', partes[2])
-    if not match:
-        raise ValueError(f"Formato de acesso à memória inválido: {' '.join(partes)}")
-    
-    imediato = match.group(1)
-    rs1 = match.group(2)
-    return rd, imediato, rs1
 
-def montar_tipo_r(partes): # fazer pra cada tipo de instrução
-    """Monta uma instrução do Tipo R em binário."""
-    # Ex: add t0, t1, t2 -> partes = ['add', 't0', 't1', 't2']
-    info = MONTADOR_ISA[partes[0]]
-    rd = format(ABI_NAMES[partes[1]], '05b')
-    rs1 = format(ABI_NAMES[partes[2]], '05b')
-    rs2 = format(ABI_NAMES[partes[3]], '05b')
-    
-    opcode = info['opcode']
-    funct3 = info['funct3']
-    funct7 = info['funct7']
+def montar(caminho_arquivo):
+    print("Iniciando primeira passagem (mapeamento de labels)...")
+    labels = primeira_passagem(caminho_arquivo)
+    print(f"Labels encontradas: {labels}")
 
-    # Monta na ordem correta do formato R
-    return f"{funct7}{rs2}{rs1}{funct3}{rd}{opcode}"
-def montar_tipo_i(partes):
-    """Monta uma instrução do Tipo I em binário."""
-    # Ex: addi t0, t1, -10  OU  lw t0, 16(sp)
-    nome_inst = partes[0]
-    info = MONTADOR_ISA[nome_inst]
+    print("Iniciando segunda passagem (tradução de instruções)...")
+    programa_binario = segunda_passagem(caminho_arquivo, labels)
     
-    if nome_inst == 'lw' or nome_inst == 'jalr':
-        rd, imediato_str, rs1_str = parse_mem_access(partes)
-    else: # addi
-        rd, rs1_str, imediato_str = partes[1], partes[2], partes[3]
-
-    rd_bin = format(ABI_NAMES[rd], '05b')
-    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
-    
-    # Converte imediato para inteiro e depois para binário de 12 bits (complemento de dois)
-    imediato = int(imediato_str)
-    imm_bin = format(imediato & 0xFFF, '012b')
-
-    opcode = info['opcode']
-    funct3 = info['funct3']
-    
-    return f"{imm_bin}{rs1_bin}{funct3}{rd_bin}{opcode}"
-
-def montar_tipo_s(partes):
-    """Monta uma instrução do Tipo S em binário."""
-    # Ex: sw t1, 32(sp)
-    info = MONTADOR_ISA[partes[0]]
-    rs2_str, imediato_str, rs1_str = parse_mem_access(partes)
-
-    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
-    rs2_bin = format(ABI_NAMES[rs2_str], '05b')
-    
-    imediato = int(imediato_str)
-    imm_bin_12 = format(imediato & 0xFFF, '012b')
-    
-    # Divide o imediato de 12 bits conforme o formato Tipo S
-    imm_11_5 = imm_bin_12[0:7]
-    imm_4_0 = imm_bin_12[7:12]
-
-    opcode = info['opcode']
-    funct3 = info['funct3']
-
-    return f"{imm_11_5}{rs2_bin}{rs1_bin}{funct3}{imm_4_0}{opcode}"
-
-def montar_tipo_b(partes, labels, endereco_atual):
-    """Monta uma instrução do Tipo B em binário."""
-    # Ex: bne t0, zero, loop
-    nome_inst = partes[0]
-    info = MONTADOR_ISA[nome_inst]
-    
-    rs1_str, rs2_str, label = partes[1], partes[2], partes[3]
-    
-    rs1_bin = format(ABI_NAMES[rs1_str], '05b')
-    rs2_bin = format(ABI_NAMES[rs2_str], '05b')
-    
-    # Calcula o offset
-    endereco_alvo = labels[label]
-    offset = endereco_alvo - endereco_atual
-    
-    # Converte o offset para binário de 13 bits (complemento de dois)
-    offset_bin_13 = format(offset & 0x1FFF, '013b')
-
-    # Reorganiza os bits do offset conforme o formato Tipo B
-    imm_12 = offset_bin_13[0]
-    imm_10_5 = offset_bin_13[2:8]
-    imm_4_1 = offset_bin_13[8:12]
-    imm_11 = offset_bin_13[1]
-    
-    opcode = info['opcode']
-    funct3 = info['funct3']
-
-    return f"{imm_12}{imm_10_5}{rs2_bin}{rs1_bin}{funct3}{imm_4_1}{imm_11}{opcode}"
-
-def montar_tipo_j(partes, labels, endereco_atual):
-    """Monta uma instrução do Tipo J em binário."""
-    # Ex: jal ra, alvo  OU  j alvo
-    nome_inst = partes[0]
-    info = MONTADOR_ISA[nome_inst]
-
-    if nome_inst == 'j': # Pseudo-instrução j
-        rd_str = 'zero' # rd é implicitamente x0
-        label = partes[1]
-    else: # jal
-        rd_str = partes[1]
-        label = partes[2]
-
-    rd_bin = format(ABI_NAMES[rd_str], '05b')
-    
-    # Calcula o offset
-    endereco_alvo = labels[label]
-    offset = endereco_alvo - endereco_atual
-    
-    # Converte para binário de 21 bits (complemento de dois)
-    offset_bin_21 = format(offset & 0x1FFFFF, '021b')
-    
-    # Reorganiza os bits do offset conforme o formato Tipo J
-    imm_20 = offset_bin_21[0]
-    imm_10_1 = offset_bin_21[10:20]
-    imm_11 = offset_bin_21[9]
-    imm_19_12 = offset_bin_21[1:9]
-    
-    imm_reorganizado = f"{imm_20}{imm_10_1}{imm_11}{imm_19_12}"
-    
-    opcode = info['opcode']
-
-    return f"{imm_reorganizado}{rd_bin}{opcode}"
+    return programa_binario

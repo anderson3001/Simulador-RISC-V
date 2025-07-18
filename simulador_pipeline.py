@@ -120,64 +120,64 @@ class SimuladorPipeline:
         if nome in ['jal', 'jalr']: return True
         return False
 
-def estagio_ex(self):
-    # Estágio de Execução ( 3 ) 
-    info = self.id_ex['instrucao_info'] # Pega info do registrador anterior
-    nome = info.get('nome')
+    def estagio_ex(self):
+        # Estágio de Execução ( 3 ) 
+        info = self.id_ex['instrucao_info'] # Pega info do registrador anterior
+        nome = info.get('nome')
 
-    if nome == 'nop':
-        # Se for nop, propaga um nop para o próximo estágio
-        self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
-        return
-    
-    # Seleciona as entradas da ULA
-    operando_a = self.id_ex['val_rs1']
-    operando_b = self.id_ex['val_rs2']
-    if info['tipo'] in ['I', 'S', 'B', 'J']:
-        operando_b = info.get('imm', 0)
-
-    resultado_ula = 0
-    
-    # ... (lógica da ULA permanece a mesma) ...
-    if nome in ['add', 'addi', 'lw', 'sw']:
-        resultado_ula = self.alu.operate('ADD', operando_a, operando_b)
-    elif nome in ['sub', 'beq', 'bne', 'blt', 'bge']:
-        resultado_ula = self.alu.operate('SUB', operando_a, operando_b)
-    elif nome in ['mul', 'div', 'rem', 'xor', 'and', 'or', 'sll', 'srl']:
-        resultado_ula = self.alu.operate(nome, operando_a, operando_b)
-    elif nome in ['jal', 'jalr']:
-        resultado_ula = self.id_ex['pc'] + 4
-    
-    # CRIA UM NOVO DICIONÁRIO para o registrador EX/MEM
-    self.ex_mem = {
-        'instrucao_info': info, 
-        'resultado_ula': resultado_ula, 
-        'val_rs2': self.id_ex['val_rs2'] # Precisa passar val_rs2 para o 'sw'
-    }
-    
-def estagio_mem(self):
-    # Estágio de Acesso à Memória ( 4 )
-    info = self.ex_mem['instrucao_info']
-    nome = info.get('nome')
-
-    if nome == 'nop':
-        self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
-        return
-
-    resultado_final = self.ex_mem['resultado_ula']
-    addr = self.ex_mem['resultado_ula']
-
-    if nome == 'lw':
-        resultado_final = self.memoria_dados.get(addr, 0) 
-    elif nome == 'sw':
-        valor_a_escrever = self.ex_mem['val_rs2']
-        self.memoria_dados[addr] = valor_a_escrever
+        if nome == 'nop':
+            # Se for nop, propaga um nop para o próximo estágio
+            self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
+            return
         
-    # CRIA UM NOVO DICIONÁRIO para o registrador MEM/WB
-    self.mem_wb = {
-        'instrucao_info': info, 
-        'resultado_final': resultado_final
-    }
+        # Seleciona as entradas da ULA
+        operando_a = self.id_ex['val_rs1']
+        operando_b = self.id_ex['val_rs2']
+        if info['tipo'] in ['I', 'S', 'B', 'J']:
+            operando_b = info.get('imm', 0)
+
+        resultado_ula = 0
+        
+        # ... (lógica da ULA permanece a mesma) ...
+        if nome in ['add', 'addi', 'lw', 'sw']:
+            resultado_ula = self.alu.operate('ADD', operando_a, operando_b)
+        elif nome in ['sub', 'beq', 'bne', 'blt', 'bge']:
+            resultado_ula = self.alu.operate('SUB', operando_a, operando_b)
+        elif nome in ['mul', 'div', 'rem', 'xor', 'and', 'or', 'sll', 'srl']:
+            resultado_ula = self.alu.operate(nome, operando_a, operando_b)
+        elif nome in ['jal', 'jalr']:
+            resultado_ula = self.id_ex['pc'] + 4
+        
+        # CRIA UM NOVO DICIONÁRIO para o registrador EX/MEM
+        self.ex_mem = {
+            'instrucao_info': info, 
+            'resultado_ula': resultado_ula, 
+            'val_rs2': self.id_ex['val_rs2'] # Precisa passar val_rs2 para o 'sw'
+        }
+        
+    def estagio_mem(self):
+        # Estágio de Acesso à Memória ( 4 )
+        info = self.ex_mem['instrucao_info']
+        nome = info.get('nome')
+
+        if nome == 'nop':
+            self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
+            return
+
+        resultado_final = self.ex_mem['resultado_ula']
+        addr = self.ex_mem['resultado_ula']
+
+        if nome == 'lw':
+            resultado_final = self.memoria_dados.get(addr, 0) 
+        elif nome == 'sw':
+            valor_a_escrever = self.ex_mem['val_rs2']
+            self.memoria_dados[addr] = valor_a_escrever
+            
+        # CRIA UM NOVO DICIONÁRIO para o registrador MEM/WB
+        self.mem_wb = {
+            'instrucao_info': info, 
+            'resultado_final': resultado_final
+        }
 
     def estagio_wb(self):
         # Estágio de Write-Back ( 5 ) 
