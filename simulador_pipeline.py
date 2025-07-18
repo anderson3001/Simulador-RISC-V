@@ -217,34 +217,34 @@ class SimuladorPipeline:
             f.write("\n" + "="*40 + "\n\n")
     # Adicionar dentro da classe SimuladorPipeline em simulador_pipeline.py
 
-def executar_um_ciclo(self):
-    """Executa um único ciclo de clock e retorna o estado atual do pipeline."""
-    if self.simulacao_terminou():
-        return None
+    def executar_um_ciclo(self):
+        """Executa um único ciclo de clock e retorna o estado atual do pipeline."""
+        if self.simulacao_terminou():
+            return None
 
-    self.clock_cycle += 1
-    
-    self.estagio_wb()
-    self.estagio_mem()
-    self.estagio_ex()
-    self.estagio_id()
-    self.estagio_if()
+        self.clock_cycle += 1
+        
+        self.estagio_wb()
+        self.estagio_mem()
+        self.estagio_ex()
+        self.estagio_id()
+        self.estagio_if()
 
-    self.gerar_saida_ciclo()
-    
-    return {
-        "if_id": self.if_id,
-        "id_ex": self.id_ex,
-        "ex_mem": self.ex_mem,
-        "mem_wb": self.mem_wb,
-    }
+        self.gerar_saida_ciclo()
+        
+        return {
+            "if_id": self.if_id,
+            "id_ex": self.id_ex,
+            "ex_mem": self.ex_mem,
+            "mem_wb": self.mem_wb,
+        }
 
-def simulacao_terminou(self):
-    """Verifica se a simulação pode parar."""
-    return (self.if_id['instrucao'] == 'nop' and 
-            self.id_ex['instrucao_info']['nome'] == 'nop' and
-            self.ex_mem['instrucao_info']['nome'] == 'nop' and
-            self.mem_wb['instrucao_info']['nome'] == 'nop')
+    def simulacao_terminou(self):
+        """Verifica se a simulação pode parar."""
+        return (self.if_id['instrucao'] == 'nop' and 
+                self.id_ex['instrucao_info']['nome'] == 'nop' and
+                self.ex_mem['instrucao_info']['nome'] == 'nop' and
+                self.mem_wb['instrucao_info']['nome'] == 'nop')
 
 # A NOVA VERSÃO
 if __name__ == "__main__":
