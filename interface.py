@@ -13,17 +13,6 @@ COMPONENTES_PATH = os.path.join(os.path.dirname(__file__), "componentes")
 if COMPONENTES_PATH not in sys.path:
     sys.path.append(COMPONENTES_PATH)
 
-# Importa módulos auxiliares (ajuste conforme os nomes dos arquivos)
-try:
-    import alu
-    import isa
-    import registradores
-    import montador
-    import simulador_pipeline
-except ImportError:
-    # Caso os módulos não existam, apenas ignore para evitar erro de importação
-    pass
-
 class InterfaceSimuladorRISCV(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -99,6 +88,7 @@ class InterfaceSimuladorRISCV(tk.Tk):
         self.reg_text.config(state="disabled")
 
     def criar_simulador(self, code):
+        print("Criado\n")
         try:
             # Ajuste conforme a interface do seu SimuladorRISCV
             return SimuladorPipeline(code)
@@ -118,6 +108,7 @@ class InterfaceSimuladorRISCV(tk.Tk):
         self.reg_text.delete("1.0", tk.END)
         if self.simulador and hasattr(self.simulador, "registradores"):
             regs = self.simulador.registradores
+            print("Registradores na interface:", regs)  # <-- Adicione isto
             for nome, valor in regs.items():
                 self.reg_text.insert(tk.END, f"{nome}: {valor}\n")
         self.reg_text.config(state="disabled")

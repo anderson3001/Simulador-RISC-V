@@ -11,6 +11,7 @@ MONTADOR_ISA = {
     "or":   {"tipo": "R", "opcode": "0110011", "funct3": "110", "funct7": "0000000"},
     "sll":  {"tipo": "R", "opcode": "0110011", "funct3": "001", "funct7": "0000000"},
     "srl":  {"tipo": "R", "opcode": "0110011", "funct3": "101", "funct7": "0000000"},
+    "nop":  {"tipo": "I", "opcode": "0010011", "funct3": "000"},
 
     "addi": {"tipo": "I", "opcode": "0010011", "funct3": "000"},
     "lw":   {"tipo": "I", "opcode": "0000011", "funct3": "010"},
@@ -86,9 +87,14 @@ def _sign_extend(value, bits):
     return (value & (sign_bit - 1)) - (value & sign_bit)
 
 
-def decodificar(inst_bin: str):
+def decodificar(inst_bin):
+    print("Decodificando:", inst_bin)
+    # Aceita string de bits ou inteiro
+    if isinstance(inst_bin, int):
+        inst_bin = f"{inst_bin:032b}"
     if len(inst_bin) != 32:
         return {"nome": "inválida", "error": "Tamanho incorreto"}
+    # ...restante do código...
 
     # Campos da instrução no formato do RISC-V 
     opcode = inst_bin[25:32]

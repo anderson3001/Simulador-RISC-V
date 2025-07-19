@@ -1,162 +1,155 @@
-# simulador_pipeline.py
-# Este é o arquivo principal que orquestra o simulador com pipeline.
-
 import sys
+import memoria
 from componentes.alu import ALU32Bit
 from componentes.isa import decodificar
 from componentes.registradores import Registradores
 
 class SimuladorPipeline:
-    def __init__(self, enable_forwarding=False, enable_hazard_detection=False):
-    
-        # Inicializa o simulador, instanciando todos os componentes necessários.
+    def __init__(self, codigo_assembly=None, enable_forwarding=False, enable_hazard_detection=False):
         self.pc = 0
         self.clock_cycle = 0
-        
-        # Componentes do processador
-        self.registradores = Registradores()
+        self._registradores = Registradores()
         self.alu = ALU32Bit()
+        self.memoria = memoria.Memoria()
         self.memoria_instrucoes = []
-        # A memória de dados pode ser um dicionário para endereçamento esparso
-        self.memoria_dados = {}
-
-        # Se quiser implementar os extras depois, mas por mim KKKKKKKKKKK
         self.enable_forwarding = enable_forwarding
         self.enable_hazard_detection = enable_hazard_detection
 
-        # Registradores de Pipeline
-        # Cada registrador armazena um dicionário de informações
-        # 'nop' significa que o estágio está vazio ou com uma bolha
         self.if_id = {'instrucao': 'nop', 'pc': 0}
         self.id_ex = {'instrucao_info': {'nome': 'nop'}, 'val_rs1': 0, 'val_rs2': 0, 'pc': 0}
         self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
         self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
 
-    def carregar_programa(self, arquivo_binario):
-        self.memoria_instrucoes = arquivo_binario
-        print(f"Programa carregado. {len(self.memoria_instrucoes)} instruções.")
+        self.saida = ""
+        if codigo_assembly:
+            self.carregar_codigo_assembly(codigo_assembly)
 
-    def run(self):
+    def carregar_codigo_assembly(self, codigo_assembly):
+        import montador
+        linhas = codigo_assembly.strip().splitlines()
+        self.memoria_instrucoes = montador.montar_linhas(linhas)
+        print("memoria_instrucoes:", self.memoria_instrucoes)
+        self.pc = 0
+        self.clock_cycle = 0
+        self.memoria = memoria.Memoria()
+        self._registradores = Registradores()
+        self.if_id = {'instrucao': 'nop', 'pc': 0}
+        self.id_ex = {'instrucao_info': {'nome': 'nop'}, 'val_rs1': 0, 'val_rs2': 0, 'pc': 0}
+        self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
+        self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
+        self.saida = ""
 
-        # Executa o loop principal do simulador, ciclo a ciclo
-        while True:
-            self.clock_cycle += 1
-            
-            # Executa os estágios de trás para frente para simular o fluxo de dados
-            self.estagio_wb()
-            self.estagio_mem()
-            self.estagio_ex()
-            self.estagio_id()
-            self.estagio_if()
+    def executar(self, max_ciclos=1000):
+        while not self.simulacao_terminou():
+            if self.clock_cycle >= max_ciclos:
+                print(f"Alerta: Limite de ciclos {max_ciclos} atingido, encerrando simulação.")
+                break
+            self.step()
 
-            self.gerar_saida_ciclo()
+    def step(self):
+        print("Step chamado")
+        if self.simulacao_terminou():
+            print("Simulação terminou")
+            return
+        self.clock_cycle += 1
+        print("Chamando estagio_wb")
+        self.estagio_wb()
+        print("Chamando estagio_mem")
+        self.estagio_mem()
+        print("Chamando estagio_ex")
+        self.estagio_ex()
+        print("Chamando estagio_id")
+        self.estagio_id()
+        print("Chamando estagio_if")
+        self.estagio_if()
+        self.saida += self.gerar_saida_ciclo()
 
-            # Condição de parada: o pipeline está vazio e não há mais instruções para buscar
-            if (self.if_id['instrucao'] == 'nop' and 
+    def simulacao_terminou(self):
+        pipeline_vazia = (self.if_id['instrucao'] == 'nop' and 
                 self.id_ex['instrucao_info']['nome'] == 'nop' and
                 self.ex_mem['instrucao_info']['nome'] == 'nop' and
-                self.mem_wb['instrucao_info']['nome'] == 'nop'):
-                print(f"\nSimulação concluída em {self.clock_cycle} ciclos.")
-                break
-            
-            # Limite que ele impos, para ter certeza que não vai ficar infinito
-            if self.clock_cycle > 1000:
-                print("Simulação atingiu o limite de ciclos. Interrompendo.")
-                break
+                self.mem_wb['instrucao_info']['nome'] == 'nop')
+        pc_fora = self.pc >= len(self.memoria_instrucoes) * 4
+        return pipeline_vazia and pc_fora
 
     def estagio_if(self):
-        # Estágio Instruction Fetch ( 1 )
+        print("estagio_if\n")
         if self.pc < len(self.memoria_instrucoes) * 4:
-            # O PC é em bytes, então dividimos por 4 para obter o índice
             indice_inst = self.pc // 4
             instrucao_bin = self.memoria_instrucoes[indice_inst]
             self.if_id = {'instrucao': instrucao_bin, 'pc': self.pc}
-            # Incrementa o PC para a próxima instrução
             self.pc += 4
         else:
-            # Acabaram as instruções
             self.if_id = {'instrucao': 'nop', 'pc': self.pc}
 
     def estagio_id(self):
-        # Estágio de Instruction Decode ( 2 )
-      
-        # Passa a instrução do estágio anterior para o atual
+        print("estagio_id\n")
         instrucao_bin = self.if_id['instrucao']
+        print("Instrução recebida em ID:", instrucao_bin)
         pc_atual = self.if_id['pc']
 
         if instrucao_bin == 'nop':
             self.id_ex = {'instrucao_info': {'nome': 'nop'}, 'val_rs1': 0, 'val_rs2': 0, 'pc': 0}
             return
 
-        # Usa a função de decodificação do ISA.py
         info = decodificar(instrucao_bin)
-        
-        # Lê os valores dos registradores de origem
-        val_rs1 = self.registradores.read(info.get('rs1', 0))
-        val_rs2 = self.registradores.read(info.get('rs2', 0))
-        
+        print("Decodificado:", info)
+        val_rs1 = self._registradores.read(info.get('rs1', 0))
+        val_rs2 = self._registradores.read(info.get('rs2', 0))
         self.id_ex = {'instrucao_info': info, 'val_rs1': val_rs1, 'val_rs2': val_rs2, 'pc': pc_atual}
+        # ... resto do código ...
 
-        # Lógica de desvio (na versão básica, resolvida aqui)
-        # O projeto pede para o programador inserir NOPs, então o stall é manual.
-        # Se a instrução for um desvio condicional tomado ou um salto incondicional, atualizamos o PC.
         nome_inst = info.get('nome')
         if nome_inst in ['beq', 'bne', 'blt', 'bge', 'jal', 'jalr']:
             tomou_desvio = self.checar_desvio(nome_inst, val_rs1, val_rs2)
             if tomou_desvio:
-                # Calcula o novo PC
                 if nome_inst in ['jal', 'beq', 'bne', 'blt', 'bge']:
                     self.pc = pc_atual + info['imm']
                 elif nome_inst == 'jalr':
-                    self.pc = (val_rs1 + info['imm']) & ~1 # Zera o último bit
+                    self.pc = (val_rs1 + info['imm']) & ~1
 
     def checar_desvio(self, nome, val_rs1, val_rs2):
-        # Verifica se um desvio deve ser tomado.
         if nome == 'beq' and val_rs1 == val_rs2: return True
         if nome == 'bne' and val_rs1 != val_rs2: return True
-        # Para blt e bge, precisamos tratar como números com sinal
         if nome == 'blt' and self.alu.signed(val_rs1) < self.alu.signed(val_rs2): return True
         if nome == 'bge' and self.alu.signed(val_rs1) >= self.alu.signed(val_rs2): return True
         if nome in ['jal', 'jalr']: return True
         return False
 
     def estagio_ex(self):
-        # Estágio de Execução ( 3 ) 
-        info = self.id_ex['instrucao_info'] # Pega info do registrador anterior
+        print("estagio_ex\n")
+        info = self.id_ex['instrucao_info']
         nome = info.get('nome')
 
         if nome == 'nop':
-            # Se for nop, propaga um nop para o próximo estágio
             self.ex_mem = {'instrucao_info': {'nome': 'nop'}, 'resultado_ula': 0, 'val_rs2': 0}
             return
-        
-        # Seleciona as entradas da ULA
+
         operando_a = self.id_ex['val_rs1']
         operando_b = self.id_ex['val_rs2']
         if info['tipo'] in ['I', 'S', 'B', 'J']:
             operando_b = info.get('imm', 0)
 
         resultado_ula = 0
-        
-        # ... (lógica da ULA permanece a mesma) ...
-        if nome in ['add', 'addi', 'lw', 'sw']:
+        if nome in ['add', 'addi']:
             resultado_ula = self.alu.operate('ADD', operando_a, operando_b)
+        elif nome in ['lw', 'sw']:
+            resultado_ula = operando_a + operando_b  # base + offset  
         elif nome in ['sub', 'beq', 'bne', 'blt', 'bge']:
             resultado_ula = self.alu.operate('SUB', operando_a, operando_b)
         elif nome in ['mul', 'div', 'rem', 'xor', 'and', 'or', 'sll', 'srl']:
             resultado_ula = self.alu.operate(nome, operando_a, operando_b)
         elif nome in ['jal', 'jalr']:
             resultado_ula = self.id_ex['pc'] + 4
-        
-        # CRIA UM NOVO DICIONÁRIO para o registrador EX/MEM
+
         self.ex_mem = {
-            'instrucao_info': info, 
-            'resultado_ula': resultado_ula, 
-            'val_rs2': self.id_ex['val_rs2'] # Precisa passar val_rs2 para o 'sw'
+            'instrucao_info': info,
+            'resultado_ula': resultado_ula,
+            'val_rs2': self.id_ex['val_rs2']
         }
-        
+
     def estagio_mem(self):
-        # Estágio de Acesso à Memória ( 4 )
+        print("estagio_mem\n")
         info = self.ex_mem['instrucao_info']
         nome = info.get('nome')
 
@@ -168,116 +161,49 @@ class SimuladorPipeline:
         addr = self.ex_mem['resultado_ula']
 
         if nome == 'lw':
-            resultado_final = self.memoria_dados.get(addr, 0) 
+            resultado_final = self.memoria.ler_word(addr)
         elif nome == 'sw':
             valor_a_escrever = self.ex_mem['val_rs2']
-            self.memoria_dados[addr] = valor_a_escrever
-            
-        # CRIA UM NOVO DICIONÁRIO para o registrador MEM/WB
+            self.memoria.escrever_word(addr, valor_a_escrever)
+
         self.mem_wb = {
-            'instrucao_info': info, 
+            'instrucao_info': info,
             'resultado_final': resultado_final
         }
 
     def estagio_wb(self):
-        # Estágio de Write-Back ( 5 ) 
         info = self.mem_wb['instrucao_info']
         nome = info.get('nome')
-
+        print("estagio_wb\n")
         if nome != 'nop' and 'rd' in info:
-            # Instruções tipo S (sw) e B (branches) não escrevem em rd
             if info['tipo'] not in ['S', 'B']:
-                self.registradores.write(info['rd'], self.mem_wb['resultado_final'])
+                self._registradores.write(info['rd'], self.mem_wb['resultado_final'])
 
     def gerar_saida_ciclo(self):
-        # Escreve o estado atual do simulador em 'saida.out'.
-        with open("saida.out", "a") as f:
-            f.write(f"--- Ciclo {self.clock_cycle} ---\n")
-            f.write(f"PC: {self.pc}\n\n")
+        saida = f"--- Ciclo {self.clock_cycle} ---\n"
+        saida += f"PC: {self.pc}\n\n"
+        saida += "Estágios do Pipeline:\n"
+        saida += f"  IF/ID : {self.if_id['instrucao']}\n"
+        saida += f"  ID/EX : {self.id_ex['instrucao_info'].get('nome', 'nop')}\n"
+        saida += f"  EX/MEM: {self.ex_mem['instrucao_info'].get('nome', 'nop')}\n"
+        saida += f"  MEM/WB: {self.mem_wb['instrucao_info'].get('nome', 'nop')}\n"
+        saida += "\nRegistradores:\n"
+        todos_regs = self._registradores.get_all()
+        for addr in range(0, 32, 4):
+            val = self.memoria.ler_word(addr)
+            saida += f"  Endereço[0x{addr:04x}]: 0x{val:08x}\n"
+        if self.memoria:
+            saida += "\nMemória (posições preenchidas):\n"
+            for addr in range(0, self.memoria.tamanho, 4):
+                word = int.from_bytes(self.memoria.mem[addr:addr+4], 'little')
+                saida += f"  Endereço[0x{addr:04x}]: 0x{word:08x}\n"
+        return saida
 
-            # a) Instrução em cada estágio
-            f.write("Estágios do Pipeline:\n")
-            f.write(f"  IF/ID : {self.if_id['instrucao']}\n")
-            f.write(f"  ID/EX : {self.id_ex['instrucao_info'].get('nome', 'nop')}\n")
-            f.write(f"  EX/MEM: {self.ex_mem['instrucao_info'].get('nome', 'nop')}\n")
-            f.write(f"  MEM/WB: {self.mem_wb['instrucao_info'].get('nome', 'nop')}\n")
-            
-            # b) Valor dos 32 registradores
-            f.write("\nRegistradores:\n")
-            todos_regs = self.registradores.get_all()
-            for i in range(32):
-                f.write(f"  x{i:02d}: 0x{todos_regs[i]:08x} ({todos_regs[i]})\n")
+    @property
+    def registradores(self):
+        regs = self._registradores.get_all()
+        return {f"x{i}": regs[i] for i in range(32)}
 
-            # c) Conteúdo da memória
-            if self.memoria_dados:
-                f.write("\nMemória (posições preenchidas):\n")
-                for addr, val in sorted(self.memoria_dados.items()):
-                    f.write(f"  Endereço[0x{addr:04x}]: 0x{val:08x}\n")
-            
-            f.write("\n" + "="*40 + "\n\n")
-    # Adicionar dentro da classe SimuladorPipeline em simulador_pipeline.py
-
-    def executar_um_ciclo(self):
-        """Executa um único ciclo de clock e retorna o estado atual do pipeline."""
-        if self.simulacao_terminou():
-            return None
-
-        self.clock_cycle += 1
-        
-        self.estagio_wb()
-        self.estagio_mem()
-        self.estagio_ex()
-        self.estagio_id()
-        self.estagio_if()
-
-        self.gerar_saida_ciclo()
-        
-        return {
-            "if_id": self.if_id,
-            "id_ex": self.id_ex,
-            "ex_mem": self.ex_mem,
-            "mem_wb": self.mem_wb,
-        }
-
-    def simulacao_terminou(self):
-        """Verifica se a simulação pode parar."""
-        return (self.if_id['instrucao'] == 'nop' and 
-                self.id_ex['instrucao_info']['nome'] == 'nop' and
-                self.ex_mem['instrucao_info']['nome'] == 'nop' and
-                self.mem_wb['instrucao_info']['nome'] == 'nop')
-
-# A NOVA VERSÃO
-if __name__ == "__main__":
-    # --- PREPARAÇÃO ---
-    # 0. Importar o montador que você criou
-    import montador 
-
-    # 1. Limpar o arquivo de saída anterior
-    open("saida.out", "w").close()
-
-    # 2. Verificar se um arquivo .asm foi fornecido
-    if len(sys.argv) < 2:
-        print("Uso: python simulador_pipeline.py <caminho_para_arquivo.asm>")
-        sys.exit(1)
-
-    caminho_arquivo_asm = sys.argv[1]
-    if not caminho_arquivo_asm.endswith('.asm'):
-        print("Erro: O arquivo de entrada deve ser do tipo .asm")
-        sys.exit(1)
-
-    # --- FASE 1: MONTAGEM ---
-    # Chama o montador para traduzir o .asm para binário
-    print(f"Montando o arquivo: {caminho_arquivo_asm}...")
-    programa_em_binario = montador.montar(caminho_arquivo_asm)
-    
-    # Se a montagem falhar ou o arquivo estiver vazio, encerra.
-    if not programa_em_binario:
-        print("Erro durante a montagem ou arquivo vazio. Encerrando.")
-        sys.exit(1)
-    print("Montagem concluída com sucesso.")
-
-    # --- FASE 2: SIMULAÇÃO ---
-    # Agora que temos o código binário, podemos simular.
-    simulador = SimuladorPipeline()
-    simulador.carregar_programa(programa_em_binario) # Usa a NOVA versão de carregar_programa
-    simulador.run()
+    @registradores.setter
+    def registradores(self, value):
+        self._registradores = value

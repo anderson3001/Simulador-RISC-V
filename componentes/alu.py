@@ -55,41 +55,71 @@ class ALU32Bit:
         # Logical left shift by b bits
         shift = b & 0x1F
         return (a << shift) & self.mask32
+    def addi(self, a, imm):
+    # Soma registrador + imediato (como ADD, mas segundo operando é imediato)
+        return self.to_32bit(a + imm)
 
+    def lw(self, base, offset):
+        # Calcula endereço efetivo para load word
+        return self.to_32bit(base + offset)
+
+    def sw(self, base, offset):
+        # Calcula endereço efetivo para store word
+        return self.to_32bit(base + offset)
+
+    def beq(self, a, b):
+        # Subtrai para comparação de igualdade (resultado usado para decidir salto)
+        return self.to_32bit(a - b)
+
+    def bne(self, a, b):
+        # Subtrai para comparação de diferença (resultado usado para decidir salto)
+        return self.to_32bit(a - b)
+
+    def bge(self, a, b):
+        # Subtrai para comparação de maior ou igual (resultado usado para decidir salto)
+        return self.to_32bit(a - b)
+
+    def blt(self, a, b):
+        # Subtrai para comparação de menor (resultado usado para decidir salto)
+        return self.to_32bit(a - b)
+
+    def j(self, pc, offset):
+        # Calcula endereço de salto (jump)
+        return self.to_32bit(pc + offset)
+
+    def jal(self, pc, offset):
+        # Calcula endereço de salto e salva retorno (jump and link)
+        return self.to_32bit(pc + offset)
+
+    def jalr(self, base, offset):
+        # Calcula endereço de salto indireto (jump and link register)
+        return self.to_32bit((base + offset) & ~1)
 
     def operate(self, op, a, b=0):
         operations = {
-            'ADD': self.add,
-            'SUB': self.sub,
-            'AND': self.and_op,
-            'OR': self.or_op,
-            'XOR': self.xor_op,
-            'MUL':self.mul,
-            'DIV':self.div,
-            'REM':self.rem,
-            'SRL':self.srl,
-            'SLL':self.sll
+            'add': self.add,
+            'addi': self.add,
+            'sub': self.sub,
+            'and': self.and_op,
+            'or': self.or_op,
+            'xor': self.xor_op,
+            'mul': self.mul,
+            'div': self.div,
+            'rem': self.rem,
+            'srl': self.srl,
+            'sll': self.sll,
+            'lw': self.add,   # endereço base + offset
+            'sw': self.add,   # endereço base + offset
+            'beq': self.sub,  # compara diferença
+            'bne': self.sub,
+            'bge': self.sub,
+            'blt': self.sub,
+            'j': self.add,    # pode ser tratado como soma de PC + offset
+            'jal': self.add,
+            'jalr': self.add
         }
-
-        op = op.upper()
+        op = op.lower()
         if op not in operations:
             raise ValueError(f"Unsupported operation: {op}")
 
         return self.to_32bit(operations[op](a, b))
-
-
-# Example Usage
-alu = ALU32Bit()
-a = 0x7FFFFFFF  # Max positive signed 32-bit int
-b = 0x00000002
-
-print("ADD :", hex(alu.operate('ADD', a, b)))
-print("SUB :", hex(alu.operate('SUB', a, b)))
-print("AND :", hex(alu.operate('AND', a, b)))
-print("OR  :", hex(alu.operate('OR', a, b)))
-print("XOR :", hex(alu.operate('XOR', a, b)))
-print("MUL:", hex(alu.mul(a, b)))
-print("DIV:", hex(alu.div(a, b)))
-print("REM:", hex(alu.rem(a, b)))
-print("SRL:", hex(alu.srl(a, b)))
-print("SLL:", hex(alu.sll(a, b)))

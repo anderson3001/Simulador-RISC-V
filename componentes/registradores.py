@@ -9,13 +9,14 @@ class Registradores:
             "s11": 27, "t3": 28, "t4": 29, "t5": 30, "t6": 31
         }
 
-    def read(self, num_reg): #retorna o valor do registrador que está sendo lido
+    def read(self, num_reg):
         if 0 <= num_reg < 32:
             return self.regs[num_reg]
         print(f"Registrador inválido: {num_reg}")
-
-    def write(self, num_reg, valor): #escreve um valor no registrador
+        return 0  # ou levante uma exceção se preferir
+    def write(self, num_reg, valor):
         if 0 < num_reg < 32:
+            print(f"Escrevendo {valor} em x{num_reg}")
             self.regs[num_reg] = valor
 
     def get_all(self):
