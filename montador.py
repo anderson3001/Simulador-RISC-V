@@ -234,3 +234,66 @@ def montar(caminho_arquivo):
     programa_binario = segunda_passagem(caminho_arquivo, labels)
     
     return programa_binario
+# ...existing code...
+
+def montar_linhas(linhas):
+    """
+    Monta um programa a partir de uma lista de linhas de código assembly (strings).
+    Retorna uma lista de instruções binárias (strings de 32 bits).
+    """
+    # Primeira passagem: mapeia labels
+    labels = {}
+    endereco_atual = 0
+    for linha in linhas:
+        linha_sem_comentario = linha.split('#')[0].strip()
+        if not linha_sem_comentario:
+            continue
+        if ':' in linha_sem_comentario:
+            partes = [p.strip() for p in linha_sem_comentario.split(':')]
+            if partes[0]:
+                labels[partes[0]] = endereco_atual
+            if len(partes) < 2 or not partes[1]:
+                continue
+            linha_processada = partes[1]
+        else:
+            linha_processada = linha_sem_comentario
+        if linha_processada:
+            endereco_atual += 4
+
+    # Segunda passagem: monta instruções
+    programa_binario = []
+    endereco_atual = 0
+    for num_linha, linha in enumerate(linhas, 1):
+        linha_limpa = linha.split('#')[0].strip()
+        if ':' in linha_limpa:
+            linha_limpa = linha_limpa.split(':', 1)[1].strip()
+        if not linha_limpa:
+            continue
+        partes = linha_limpa.replace(',', ' ').split()
+        if not partes:
+            continue
+        nome_inst = partes[0].lower()
+        info = MONTADOR_ISA.get(nome_inst)
+        if not info:
+            continue  # Ignora instruções desconhecidas
+        try:
+            binario_final = ""
+            if info['tipo'] == 'R':
+                binario_final = montar_tipo_r(partes)
+            elif info['tipo'] == 'I':
+                binario_final = montar_tipo_i(partes)
+            elif info['tipo'] == 'S':
+                binario_final = montar_tipo_s(partes)
+            elif info['tipo'] == 'B':
+                binario_final = montar_tipo_b(partes, labels, endereco_atual)
+            elif info['tipo'] == 'J':
+                binario_final = montar_tipo_j(partes, labels, endereco_atual)
+            if binario_final:
+                assert len(binario_final) == 32
+                programa_binario.append(binario_final)
+                endereco_atual += 4
+        except Exception as e:
+            print(f"Erro de montagem na linha {num_linha} ('{linha.strip()}'): {e}")
+            return []
+    print("Programa binário montado:", programa_binario)
+    return programa_binario

@@ -13,9 +13,9 @@ class Registradores:
         if 0 <= num_reg < 32:
             return self.regs[num_reg]
         print(f"Registrador inválido: {num_reg}")
-
-    def write(self, num_reg, valor): #escreve um valor no registrador
+    def write(self, num_reg, valor):
         if 0 < num_reg < 32:
+            print(f"Escrevendo {valor} em x{num_reg}")
             self.regs[num_reg] = valor
 
     def get_all(self):

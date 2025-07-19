@@ -86,9 +86,14 @@ def _sign_extend(value, bits):
     return (value & (sign_bit - 1)) - (value & sign_bit)
 
 
-def decodificar(inst_bin: str):
+def decodificar(inst_bin):
+    print("Decodificando:", inst_bin)
+    # Aceita string de bits ou inteiro
+    if isinstance(inst_bin, int):
+        inst_bin = f"{inst_bin:032b}"
     if len(inst_bin) != 32:
         return {"nome": "inválida", "error": "Tamanho incorreto"}
+    # ...restante do código...
 
     # Campos da instrução no formato do RISC-V 
     opcode = inst_bin[25:32]
