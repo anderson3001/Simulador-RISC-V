@@ -57,7 +57,9 @@ def montar_tipo_i(partes):
     nome_inst = partes[0]
     info = MONTADOR_ISA[nome_inst]
     
-    if nome_inst in ['lw', 'jalr']:
+    if nome_inst == 'nop':
+        rd_str, rs1_str, imediato_str = 'zero', 'zero', '0'
+    elif nome_inst in ['lw', 'jalr']:
         rd_str, imediato_str, rs1_str = parse_mem_access(partes)
     else: # addi
         rd_str, rs1_str, imediato_str = partes[1], partes[2], partes[3]

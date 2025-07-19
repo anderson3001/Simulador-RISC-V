@@ -11,6 +11,7 @@ MONTADOR_ISA = {
     "or":   {"tipo": "R", "opcode": "0110011", "funct3": "110", "funct7": "0000000"},
     "sll":  {"tipo": "R", "opcode": "0110011", "funct3": "001", "funct7": "0000000"},
     "srl":  {"tipo": "R", "opcode": "0110011", "funct3": "101", "funct7": "0000000"},
+    "nop":  {"tipo": "I", "opcode": "0010011", "funct3": "000"},
 
     "addi": {"tipo": "I", "opcode": "0010011", "funct3": "000"},
     "lw":   {"tipo": "I", "opcode": "0000011", "funct3": "010"},
