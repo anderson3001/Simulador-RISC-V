@@ -39,9 +39,11 @@ class SimuladorPipeline:
         self.mem_wb = {'instrucao_info': {'nome': 'nop'}, 'resultado_final': 0}
         self.saida = ""
 
-    def executar(self):
-        self.saida = ""
+    def executar(self, max_ciclos=1000):
         while not self.simulacao_terminou():
+            if self.clock_cycle >= max_ciclos:
+                print(f"Alerta: Limite de ciclos {max_ciclos} atingido, encerrando simulação.")
+                break
             self.step()
 
     def step(self):
@@ -63,10 +65,12 @@ class SimuladorPipeline:
         self.saida += self.gerar_saida_ciclo()
 
     def simulacao_terminou(self):
-        return (self.if_id['instrucao'] == 'nop' and 
+        pipeline_vazia = (self.if_id['instrucao'] == 'nop' and 
                 self.id_ex['instrucao_info']['nome'] == 'nop' and
                 self.ex_mem['instrucao_info']['nome'] == 'nop' and
                 self.mem_wb['instrucao_info']['nome'] == 'nop')
+        pc_fora = self.pc >= len(self.memoria_instrucoes) * 4
+        return pipeline_vazia and pc_fora
 
     def estagio_if(self):
         print("estagio_if\n")
@@ -190,9 +194,9 @@ class SimuladorPipeline:
             saida += f"  Endereço[0x{addr:04x}]: 0x{val:08x}\n"
         if self.memoria:
             saida += "\nMemória (posições preenchidas):\n"
-            for addr, val in sorted(self.memoria.items()):
-                saida += f"  Endereço[0x{addr:04x}]: 0x{val:08x}\n"
-        saida += "\n" + "="*40 + "\n\n"
+            for addr in range(0, self.memoria.tamanho, 4):
+                word = int.from_bytes(self.memoria.mem[addr:addr+4], 'little')
+                saida += f"  Endereço[0x{addr:04x}]: 0x{word:08x}\n"
         return saida
 
     @property
