@@ -35,4 +35,4 @@
 # --- Fim ---
 # Loop infinito para parar a execução.
 fim:
-    j fim
+    
