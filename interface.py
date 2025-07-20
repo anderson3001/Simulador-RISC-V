@@ -60,6 +60,7 @@ class InterfaceSimuladorRISCV(tk.Tk):
                 code = f.read()
             self.code_text.delete("1.0", tk.END)
             self.code_text.insert(tk.END, code)
+            self.reset_simulation()
 
     def run_simulation(self):
         code = self.code_text.get("1.0", tk.END)
@@ -97,20 +98,28 @@ class InterfaceSimuladorRISCV(tk.Tk):
             return None
 
     def update_output(self):
+        """Lê o arquivo saida.out e atualiza a caixa de texto de saída."""
         self.output_text.config(state="normal")
         self.output_text.delete("1.0", tk.END)
-        if self.simulador and hasattr(self.simulador, "saida"):
-            self.output_text.insert(tk.END, self.simulador.saida)
+        try:
+            with open("saida.out", "r") as f:
+                self.output_text.insert(tk.END, f.read())
+        except FileNotFoundError:
+            self.output_text.insert(tk.END, "Arquivo saida.out ainda não foi criado. Execute um passo.")
         self.output_text.config(state="disabled")
+        self.output_text.see(tk.END) # Rola para o final
 
     def update_registradores(self):
+        """Atualiza a caixa de texto dos registradores."""
         self.reg_text.config(state="normal")
         self.reg_text.delete("1.0", tk.END)
-        if self.simulador and hasattr(self.simulador, "registradores"):
+        if self.simulador:
             regs = self.simulador.registradores
-            print("Registradores na interface:", regs)  # <-- Adicione isto
-            for nome, valor in regs.items():
-                self.reg_text.insert(tk.END, f"{nome}: {valor}\n")
+            abi_map = {v: k for k, v in self.simulador._registradores.ABI.items()}
+            for i in range(32):
+                abi_name = abi_map.get(i, f'x{i}')
+                valor = regs.get(f"x{i}", 0)
+                self.reg_text.insert(tk.END, f"x{i:<2} ({abi_name:<4}): 0x{valor:08x} ({valor})\n")
         self.reg_text.config(state="disabled")
 
 if __name__ == "__main__":
