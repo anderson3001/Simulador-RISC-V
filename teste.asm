@@ -33,6 +33,5 @@
     lw   t5, 0(s0)       # Carrega o valor do endereço 200 de volta para o registrador t5
 
 # --- Fim ---
-# Loop infinito para parar a execução.
 fim:
     
