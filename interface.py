@@ -2,9 +2,9 @@ import sys
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
-from memoria import Memoria
+from componentes.memoria import Memoria
 from componentes.registradores import Registradores
-from unidade_de_controle import UnidadeDeControle
+from componentes.unidade_de_controle import UnidadeDeControle
 from componentes.alu  import ALU32Bit
 from simulador_pipeline import SimuladorPipeline
 

@@ -1,5 +1,5 @@
 import sys
-from memoria import Memoria
+from componentes.memoria import Memoria
 from componentes.alu import ALU32Bit
 from componentes.isa import decodificar
 from componentes.registradores import Registradores
